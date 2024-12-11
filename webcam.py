@@ -37,27 +37,13 @@ def draw_label_with_background(img, label, x, y, color, font_scale=0.6, thicknes
     cv2.rectangle(img, box_coords[0], box_coords[1], color, cv2.FILLED)
     cv2.putText(img, label, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), thickness)
 
-# Function to display a styled accident message
-def display_accident_message(frame, text, position=None, font=cv2.FONT_HERSHEY_COMPLEX, font_scale=1, color=(0, 0, 255), thickness=3):
-    """
-    Display a styled text with a translucent rectangle background for emphasis.
-    """
-    text_size = cv2.getTextSize(text, font, font_scale, thickness)[0]
-    text_width, text_height = text_size
-
-    # Default position to the top-left corner if not provided
-    if position is None:
-        position = (10, text_height + 20)  # Padding of 10 pixels from the top and left
-
-    x, y = position
-    padding = 10
-
-    # Draw translucent background rectangle
-    cv2.rectangle(frame, (x, y - text_height - padding), (x + text_width + padding * 2, y), (0, 0, 0), -1)
-    cv2.addWeighted(frame, 0.3, frame, 0.7, 0, frame)  # Add some transparency to the background
-
-    # Draw text
-    cv2.putText(frame, text, (x + padding, y - padding), font, font_scale, color, thickness, cv2.LINE_AA)
+# Function to check overlap between two bounding boxes
+def is_overlap(bbox1, bbox2):
+    x1, y1, x2, y2 = bbox1
+    bx1, by1, bx2, by2 = bbox2
+    overlap_x = max(0, min(x2, bx2) - max(x1, bx1))
+    overlap_y = max(0, min(y2, by2) - max(y1, by1))
+    return overlap_x > 0 and overlap_y > 0
 
 # Open the webcam
 cap = cv2.VideoCapture(0)  # Use 0 for the default camera
@@ -76,6 +62,11 @@ while True:
     # Run YOLO detection on the current frame
     results = model(frame)
 
+    # Initialize detection lists
+    detected_helmet = []
+    detected_vest = []
+    persons = []
+
     # Flag for accident detection
     accident_detected = False
 
@@ -87,18 +78,48 @@ while True:
             class_id = int(box.cls[0])
             class_name = class_names[class_id]
 
-            # Apply general logic for all classes
             if conf > 0.5:
                 color = class_colors.get(class_name, (255, 255, 255))  # Default to white if class not in colors
+                
                 if class_name != "Accident":
                     cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                     label = f"{class_name}: {conf:.2f}"
                     draw_label_with_background(frame, label, x1, y1 - 10, color)
 
-                # Detect accidents and mark the flag
+                    # Apply specific logic for special classes
+                    if class_name == "helmet":
+                        detected_helmet.append((x1, y1, x2, y2))
+                    elif class_name == "vest":
+                        detected_vest.append((x1, y1, x2, y2))
+                    elif class_name == "person":
+                        persons.append((x1, y1, x2, y2))
+
                 elif class_name == "Accident":
                     accident_detected = True
                     cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+
+    # Specific logic for persons, helmet, and vest
+    for person_bbox in persons:
+        x1, y1, x2, y2 = person_bbox
+        is_helmet = any(is_overlap(person_bbox, (hx1, hy1, hx2, hy2)) for (hx1, hy1, hx2, hy2) in detected_helmet)
+        is_vest = any(is_overlap(person_bbox, (vx1, vy1, vx2, vy2)) for (vx1, vy1, vx2, vy2) in detected_vest)
+
+        label_y_offset = y1 - 15
+        if is_helmet and is_vest:
+            color = (0, 255, 0)
+            label = "PPE kit detected"
+        elif is_helmet and not is_vest:
+            color = (0, 255, 255)
+            label = "Helmet, No Jacket"
+        elif is_vest and not is_helmet:
+            color = (0, 255, 255)
+            label = "Jacket, No Helmet"
+        else:
+            color = (0, 0, 255)
+            label = "No PPE kit"
+
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        draw_label_with_background(frame, label, x1, label_y_offset, color)
 
     # Display accident message if detected
     if accident_detected:
