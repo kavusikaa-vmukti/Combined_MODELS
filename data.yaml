@@ -1,0 +1,20 @@
+train: /home/vmukti/IFSEC-FINAL/Final_Folder/Data/train
+val: /home/vmukti/IFSEC-FINAL/Final_Folder/Data/valid
+test: /home/vmukti/IFSEC-FINAL/Final_Folder/Data/test
+
+nc: 13  # Number of classes
+names:
+  - Fall
+  - Sitting
+  - Standing
+  - drowning
+  - pothole
+  - Accident
+  - Unknown_Car
+  - negative
+  - helmet
+  - no-helmet
+  - no-vest
+  - person
+  - vest
+
